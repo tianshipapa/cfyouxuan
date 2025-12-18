@@ -15,4 +15,4 @@ jobs:
     steps:
       - name: 发送 POST 请求到 Deploy Hook
         run: |
-          curl -X POST "${{ secrets.CF_PAGES_DEPLOY_HOOK }}"
+          curl -X POST /update "${{ secrets.CF_PAGES_DEPLOY_HOOK }}"
