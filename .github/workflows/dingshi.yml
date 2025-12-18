@@ -2,13 +2,18 @@ name: 自动触发 IP 更新
 
 on:
   schedule:
-    - cron: '0 */8 * * *' # 每 8 小时触发一次
-  workflow_dispatch: # 允许手动触发
+    - cron: '0 */8 * * *'
+  workflow_dispatch:
 
 jobs:
   trigger-update:
     runs-on: ubuntu-latest
     steps:
       - name: 发送更新请求
-        # 修正关键点：1. 使用单行避免换行符错误 2. 补全 "Token " 前缀 3. 使用单引号包裹变量
-        run: curl -X POST '${{ secrets.CF_URL }}/update' -H 'Authorization: Token ${{ secrets.TOKEN }}' -H 'Content-Type: application/json'
+        env:
+          CF_URL: ${{ secrets.CF_URL }}
+          MY_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          curl -X POST "${CF_URL}/update" \
+          -H "Authorization: Token ${MY_TOKEN}" \
+          -H "Content-Type: application/json"
