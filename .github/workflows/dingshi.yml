@@ -1,0 +1,18 @@
+name: 自动触发 Cloudflare Pages 构建
+
+on:
+  schedule:
+    # 这里的格式是：分 时 日 月 周 (UTC时间)
+    # 0 */8 * * * 表示每 8 小时的 0 分触发一次
+    - cron: '0 */8 * * *'
+  
+  # 允许手动在 GitHub Actions 页面点击 "Run workflow" 按钮进行测试
+  workflow_dispatch:
+
+jobs:
+  trigger-cloudflare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送 POST 请求到 Deploy Hook
+        run: |
+          curl -X POST "${{ secrets.CF_PAGES_DEPLOY_HOOK }}"
