@@ -1,8 +1,8 @@
 name: 自动触发 IP 更新
 
 on:
-  schedule:
-    - cron: '0 */8 * * *'
+ # schedule:
+    # - cron: '0 */8 * * *'
   workflow_dispatch:
 
 jobs:
