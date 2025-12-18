@@ -1,4 +1,5 @@
-# V2.5版本，添加管理员登录参数，需要到CF worker环境变量里添加 ADMIN_PASSWORD，网页增加Token管理，登陆后可用
+# 也可以在cloudflare pages中使用
+# V2.5版本，添加管理员登录参数，需要到CF worker环境变量里添加 ADMIN_PASSWORD，网页增加Token管理，登陆后可用 
 <img width="1339" height="575" alt="图片" src="https://github.com/user-attachments/assets/9edcd160-85ca-4d85-9344-6d3699161300" />
 <img width="1598" height="517" alt="图片" src="https://github.com/user-attachments/assets/e32a4353-6954-40c7-b0d2-01860eace439" />
 <img width="1370" height="674" alt="图片" src="https://github.com/user-attachments/assets/4a727f2d-8eb6-4edb-b9a8-d5fe68fbb2b1" />
