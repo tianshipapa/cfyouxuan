@@ -1,12 +1,11 @@
-
 /**
- * Cloudflare 优选 IP 收集器 - Worker 版本 V2.5
+ * Cloudflare 优选 IP 收集器 - Worker 版本 V2.6 (增强交互版)
  * 功能：自动从多个来源抓取 IP，进行延迟测试，并提供管理后台。
+ * 修复：复制、全部复制、ITDog 联测功能
  * 
  * 配置要求：
  * 1. 环境变量：ADMIN_PASSWORD (后台登录密码)
  * 2. KV 绑定：IP_STORAGE (用于存储 IP 数据和配置)
-
  */
 
 // 自定义优质IP数量
@@ -66,7 +65,6 @@ export default {
           case '/':
             return await serveHTML(env, request);
           case '/update':
-            // 修改点：取消了请求方法限制，允许 GET 方便浏览器调用
             return await handleUpdate(env, request);
           case '/ips':
           case '/ip.txt':
@@ -275,6 +273,7 @@ async function handleAdminLogout() { return jsonResponse({ success: true }); }
 
 async function handleItdogData(env, request) {
     if (!await verifyAdmin(request, env)) return jsonResponse({ error: 'Unauthorized' }, 401);
+    // ITDog 需要的是全量 IP，不仅仅是测速后的优选 IP
     const data = await getStoredIPs(env);
     return jsonResponse({ ips: data.ips });
 }
@@ -387,7 +386,7 @@ async function serveHTML(env, request) {
                 <button onclick="updateIPs()" id="update-btn" class="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all flex items-center gap-2">🔄 立即采集</button>
                 <button onclick="startSpeedTest()" id="speedtest-btn" class="px-6 py-3 bg-amber-500 text-white rounded-xl font-bold hover:bg-amber-600 shadow-lg shadow-amber-100 transition-all flex items-center gap-2">⚡ 手动测速</button>
                 <div class="h-10 w-px bg-slate-200 mx-2 hidden md:block"></div>
-                <button onclick="downloadFast()" class="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all">📥 下载优质 IP</button>
+                <button onclick="downloadFast()" class="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all">📥 下载 IP 文件</button>
                 <button onclick="openItdog()" class="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all">🌐 ITDog 联测</button>
                 <button onclick="refreshData()" class="px-6 py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all">🔄 刷新数据</button>
             </div>
@@ -423,19 +422,19 @@ async function serveHTML(env, request) {
         <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
                 <h2 class="text-xl font-bold">⚡ 优选地址 (Top 25)</h2>
-                <button onclick="copyFastIPs()" class="text-blue-600 font-bold hover:underline">📋 复制全部</button>
+                <button onclick="copyFastIPs()" class="text-blue-600 font-bold hover:underline px-4 py-2 hover:bg-blue-50 rounded-lg transition-colors">📋 复制全部优选</button>
             </div>
             <div id="ip-list" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
                 ${speedData.fastIPs?.length > 0 ? speedData.fastIPs.map(item => `
                 <div class="px-8 py-4 flex items-center justify-between hover:bg-slate-50/50 group">
                     <div class="flex items-center gap-4">
-                        <span class="font-mono text-slate-700 font-bold">${item.ip}</span>
+                        <span class="font-mono text-slate-700 font-bold ip-text">${item.ip}</span>
                     </div>
                     <div class="flex items-center gap-6">
                         <span class="px-3 py-1 rounded-lg text-sm font-bold ${item.latency < 200 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">
                             ${item.latency}ms
                         </span>
-                        <button onclick="copyIP('${item.ip}')" class="opacity-0 group-hover:opacity-100 transition-opacity p-2 hover:bg-white rounded-lg border border-slate-100">📋</button>
+                        <button onclick="copyIP('${item.ip}')" class="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1.5 hover:bg-white bg-slate-50 rounded-lg border border-slate-200 text-xs font-bold text-slate-600">复制</button>
                     </div>
                 </div>`).join('') : '<div class="py-20 text-center text-slate-400">暂无测速数据，点击采集或测速</div>'}
             </div>
@@ -483,6 +482,33 @@ async function serveHTML(env, request) {
         let sessionId = "${sessionId}";
         let currentToken = "${tokenConfig?.token || ''}";
 
+        // Toast 提示函数
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = \`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl shadow-xl z-50 font-bold transition-all duration-300 translate-y-10 opacity-0 \${type === 'error' ? 'bg-red-500 text-white' : 'bg-slate-800 text-white'}\`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (err) {
+                console.error('Copy failed:', err);
+                return false;
+            }
+        }
+
         function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
         function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
 
@@ -500,18 +526,68 @@ async function serveHTML(env, request) {
             try {
                 const res = await fetchApi('/update');
                 if (res.success) {
-                    alert('采集完成: ' + res.totalIPs + ' 个 IP');
-                    location.reload();
-                } else alert('失败: ' + (res.error || '未知原因'));
+                    showToast('采集完成: ' + res.totalIPs + ' 个 IP');
+                    setTimeout(() => location.reload(), 1500);
+                } else showToast('失败: ' + (res.error || '未知原因'), 'error');
             } finally { hideLoading(); }
         }
 
         async function startSpeedTest() {
             showLoading();
-            const items = document.querySelectorAll('.ip-item'); // 仅演示
-            alert('测速已在后台启动，请 10 秒后刷新数据');
-            hideLoading();
+            showToast('测速已在后台启动，请稍后刷新', 'info');
+            setTimeout(() => hideLoading(), 2000);
         }
+
+        // --- 复制功能 ---
+
+        async function copyIP(ip) {
+            if(await copyToClipboard(ip)) {
+                showToast('已复制: ' + ip);
+            } else {
+                showToast('复制失败', 'error');
+            }
+        }
+
+        async function copyFastIPs() {
+            // 获取当前显示的列表中的 IP
+            const ipElements = document.querySelectorAll('.ip-text');
+            if(ipElements.length === 0) return showToast('没有可复制的 IP', 'error');
+
+            const ips = Array.from(ipElements).map(el => el.innerText).join('\\n');
+            if(await copyToClipboard(ips)) {
+                showToast(\`已复制 \${ipElements.length} 个优选 IP\`);
+            } else {
+                showToast('复制失败', 'error');
+            }
+        }
+
+        async function openItdog() {
+            showToast('正在获取全量 IP...', 'info');
+            try {
+                const res = await fetchApi('/itdog-data');
+                if (res.ips && res.ips.length > 0) {
+                    const ipText = res.ips.join('\\n');
+                    if (await copyToClipboard(ipText)) {
+                        showToast('IP 已复制，正在打开 ITDog...');
+                        setTimeout(() => {
+                            window.open('https://www.itdog.cn/batch_tcping/', '_blank');
+                        }, 1000);
+                    } else {
+                        showToast('复制失败，请手动复制', 'error');
+                    }
+                } else {
+                    showToast('暂无 IP 数据', 'error');
+                }
+            } catch (error) {
+                showToast('获取数据失败: ' + error.message, 'error');
+            }
+        }
+
+        function downloadFast() {
+            window.open('/fast-ips.txt' + (sessionId ? '?session='+sessionId : (currentToken ? '?token='+currentToken : '')));
+        }
+        
+        // --- 认证功能 ---
 
         async function login() {
             const password = document.getElementById('admin-password').value;
@@ -519,7 +595,7 @@ async function serveHTML(env, request) {
             const data = await res.json();
             if (data.success) {
                 location.href = '/?session=' + data.sessionId;
-            } else alert('密码错误');
+            } else showToast('密码错误', 'error');
         }
 
         async function logout() {
@@ -532,7 +608,16 @@ async function serveHTML(env, request) {
             const days = document.getElementById('token-days').value;
             const never = document.getElementById('token-never').checked;
             const res = await fetchApi('/admin-token', 'POST', { token, expiresDays: days, neverExpire: never });
-            if (res.success) location.reload();
+            if (res.success) {
+                showToast('配置已保存');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(res.error, 'error');
+            }
+        }
+
+        async function copyToken() {
+            if(await copyToClipboard(currentToken)) showToast('Token 已复制');
         }
 
         function openTokenModal() {
@@ -549,20 +634,9 @@ async function serveHTML(env, request) {
             } else document.getElementById('login-modal').classList.remove('hidden');
         };
 
-        function copyIP(ip) {
-            navigator.clipboard.writeText(ip);
-            alert('已复制: ' + ip);
-        }
-
-        function downloadFast() {
-            window.open('/fast-ips.txt' + (sessionId ? '?session='+sessionId : (currentToken ? '?token='+currentToken : '')));
-        }
-        
-        function openItdog() { window.open('https://www.itdog.cn/batch_tcping/'); }
         function refreshData() { location.reload(); }
     </script>
 </body>
 </html>`;
     return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
-
